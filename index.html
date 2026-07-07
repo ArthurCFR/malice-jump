@@ -56,6 +56,18 @@
   #goHero { width:110px; height:110px; border-radius:50%; border:4px solid #e05555;
     box-shadow:0 6px 20px rgba(0,0,0,.5); }
   .gameover-title { color:#ff8a8a; text-shadow:3px 3px 0 #7a2020, 6px 6px 0 rgba(0,0,0,.35); }
+  #pizzaBtn {
+    position:absolute; bottom:calc(18px + env(safe-area-inset-bottom));
+    left:50%; transform:translateX(-50%);
+    width:72px; height:72px; border-radius:50%;
+    background:rgba(255,255,255,.85); border:3px solid #b0552f;
+    box-shadow:0 4px 0 #b0552f, 0 6px 16px rgba(0,0,0,.3);
+    cursor:pointer; z-index:5; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    touch-action:manipulation;
+  }
+  #pizzaBtn:active { transform:translateX(-50%) translateY(3px); box-shadow:0 1px 0 #b0552f; }
+  #pizzaBtn img { width:52px; height:52px; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -68,20 +80,25 @@
       <div><img src="assets/sprite_malice.png" alt=""> Malice — saute le plus haut !</div>
       <div><img src="assets/sprite_azelie.png" alt=""> Azélie — +100 points 💖</div>
       <div><img src="assets/sprite_alicia.png" alt=""> Alicia — super saut 🚀</div>
-      <div><img src="assets/artus.png" alt="" class="round"> Artus — DANGER, évite-le ! 😈</div>
+      <div><img src="assets/artus.png" alt="" class="round"> Arthus — DANGER, évite-le ! 😈</div>
+      <div><img src="assets/pizza.png" alt=""> Bouton pizza — tire pour éliminer Arthus !</div>
     </div>
     <button class="btn" id="playBtn">JOUER</button>
     <div class="hint">📱 Touche la moitié gauche / droite de l'écran pour te déplacer &nbsp;·&nbsp; ⌨️ flèches ← →</div>
   </div>
 
   <div id="gameover" class="screen hidden">
-    <img id="goHero" src="assets/artus.png" alt="Artus">
+    <img id="goHero" src="assets/artus.png" alt="Arthus">
     <h1 class="gameover-title">GAME<br>OVER</h1>
     <div>SCORE</div>
     <div id="finalScore">0</div>
     <div id="bestScore"></div>
     <button class="btn" id="replayBtn">REJOUER</button>
   </div>
+
+  <button id="pizzaBtn" class="hidden" aria-label="Tirer une pizza">
+    <img src="assets/pizza.png" alt="🍕">
+  </button>
 </div>
 
 <script>
@@ -109,7 +126,8 @@
   // ---------- Assets ----------
   const IMGS = {};
   const toLoad = { malice:'assets/sprite_malice.png', azelie:'assets/sprite_azelie.png',
-                   alicia:'assets/sprite_alicia.png', artus:'assets/artus.png', bg:'assets/bg.webp' };
+                   alicia:'assets/sprite_alicia.png', artus:'assets/artus.png',
+                   pizza:'assets/pizza.png', bg:'assets/bg.webp' };
   let loaded = 0, total = Object.keys(toLoad).length;
   for (const [k, src] of Object.entries(toLoad)) {
     IMGS[k] = new Image();
@@ -141,7 +159,8 @@
   // ---------- State ----------
   const STATE = { HOME: 0, PLAY: 1, OVER: 2 };
   let state = STATE.HOME;
-  let platforms = [], bonuses = [], enemies = [], particles = [], floaters = [];
+  let platforms = [], bonuses = [], enemies = [], particles = [], floaters = [], pizzas = [];
+  let shootCd = 0;
   let player, score, best, cameraShake, topPlatformY, bgScroll;
   best = +(localStorage.getItem('malicejump_best') || 0);
 
@@ -186,7 +205,8 @@
   }
 
   function reset() {
-    platforms = []; bonuses = []; enemies = []; particles = []; floaters = [];
+    platforms = []; bonuses = []; enemies = []; particles = []; floaters = []; pizzas = [];
+    shootCd = 0;
     score = 0; cameraShake = 0; bgScroll = 0;
     player = { x: W/2, y: H - 140, vx: 0, vy: JUMP_V, dir: 1, boostT: 0 };
     // sol de départ + plateformes initiales
@@ -202,6 +222,7 @@
     if (e.key === 'ArrowLeft')  input.left  = true;
     if (e.key === 'ArrowRight') input.right = true;
     if ((e.key === ' ' || e.key === 'Enter') && state !== STATE.PLAY) startGame();
+    else if (e.key === ' ' && state === STATE.PLAY) shootPizza();
   });
   window.addEventListener('keyup', e => {
     if (e.key === 'ArrowLeft')  input.left  = false;
@@ -215,7 +236,7 @@
     }
   }
   window.addEventListener('pointerdown', e => {
-    if (e.target.closest('.screen')) return;
+    if (e.target.closest('.screen') || e.target.closest('#pizzaBtn')) return;
     touches.set(e.pointerId, e.clientX); updateTouchDir();
   });
   window.addEventListener('pointermove', e => {
@@ -224,6 +245,14 @@
   const endTouch = e => { touches.delete(e.pointerId); updateTouchDir(); };
   window.addEventListener('pointerup', endTouch);
   window.addEventListener('pointercancel', endTouch);
+
+  // ---------- Pizza ----------
+  function shootPizza() {
+    if (state !== STATE.PLAY || shootCd > 0) return;
+    shootCd = 25; // ~0.4s de recharge
+    pizzas.push({ x: player.x, y: player.y - PLAYER_R, vy: -13, rot: 0 });
+    beep(520, .08, 'square', .09, 350);
+  }
 
   // ---------- Particles ----------
   function burst(x, y, color, n = 14) {
@@ -301,6 +330,7 @@
       for (const en of enemies)  en.y += dy;
       for (const pa of particles) pa.y += dy;
       for (const fl of floaters) fl.y += dy;
+      for (const pz of pizzas) pz.y += dy;
       topPlatformY += dy;
     }
 
@@ -333,6 +363,26 @@
         }
       }
     }
+
+    // pizzas : déplacement + collision avec Arthus
+    if (shootCd > 0) shootCd--;
+    for (const pz of pizzas) {
+      pz.y += pz.vy;
+      pz.rot += 0.25;
+      for (const en of enemies) {
+        if (en.dead) continue;
+        if (Math.hypot(pz.x - en.x, pz.y - en.y) < en.r + 18) {
+          en.dead = true; pz.hit = true;
+          score += 50;
+          floaters.push({ x: en.x, y: en.y - 20, text: '+50 🍕', life: 1, color: '#e05555' });
+          burst(en.x, en.y, '#e05555', 20);
+          sfx.bonus();
+          break;
+        }
+      }
+    }
+    pizzas = pizzas.filter(pz => !pz.hit && pz.y > -60);
+    enemies = enemies.filter(en => !en.dead);
 
     // collision méchant
     for (const en of enemies) {
@@ -446,6 +496,15 @@
         ctx.fill();
       }
 
+      // pizzas en vol
+      for (const pz of pizzas) {
+        ctx.save();
+        ctx.translate(pz.x, pz.y);
+        ctx.rotate(pz.rot);
+        ctx.drawImage(IMGS.pizza, -20, -20, 40, 40);
+        ctx.restore();
+      }
+
       // particules
       for (const pa of particles) {
         ctx.globalAlpha = pa.life;
@@ -502,18 +561,21 @@
   // ---------- Flow ----------
   const homeEl = document.getElementById('home');
   const overEl = document.getElementById('gameover');
+  const pizzaBtnEl = document.getElementById('pizzaBtn');
 
   function startGame() {
     reset();
     state = STATE.PLAY;
     homeEl.classList.add('hidden');
     overEl.classList.add('hidden');
+    pizzaBtnEl.classList.remove('hidden');
     if (actx && actx.state === 'suspended') actx.resume();
     beep(660, .06, 'square', .08, 300);
   }
 
   function gameOver() {
     state = STATE.OVER;
+    pizzaBtnEl.classList.add('hidden');
     sfx.dead();
     cameraShake = 18;
     burst(player.x, player.y, '#e05555', 24);
@@ -525,6 +587,7 @@
 
   document.getElementById('playBtn').addEventListener('click', startGame);
   document.getElementById('replayBtn').addEventListener('click', startGame);
+  pizzaBtnEl.addEventListener('pointerdown', e => { e.preventDefault(); shootPizza(); });
 
   // ---------- Loop ----------
   let last = 0, acc = 0;
