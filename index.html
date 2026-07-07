@@ -32,8 +32,8 @@
     color:#ffd98a; text-shadow:3px 3px 0 #b0552f, 6px 6px 0 rgba(0,0,0,.35);
     line-height:1.1;
   }
-  .hero { width:110px; height:110px; border-radius:50%;
-    border:4px solid #ffd98a; box-shadow:0 6px 20px rgba(0,0,0,.5);
+  .hero { width:150px; height:150px;
+    filter:drop-shadow(0 8px 16px rgba(0,0,0,.5));
     animation:bounce 1.2s ease-in-out infinite; }
   @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
   .legend {
@@ -41,7 +41,8 @@
     background:rgba(0,0,0,.35); border-radius:14px; padding:14px 20px;
   }
   .legend div { display:flex; align-items:center; gap:10px; }
-  .legend img { width:34px; height:34px; border-radius:50%; }
+  .legend img { width:38px; height:38px; }
+  .legend img.round { border-radius:50%; width:34px; height:34px; }
   .btn {
     margin-top:6px; padding:14px 42px; font-size:20px; font-weight:bold;
     font-family:inherit; color:#2b2333; background:#ffd98a;
@@ -61,13 +62,13 @@
 <div id="wrap"><canvas id="game"></canvas>
 
   <div id="home" class="screen">
-    <img class="hero" src="assets/malice.png" alt="Malice">
+    <img class="hero" src="assets/sprite_malice.png" alt="Malice">
     <h1>MALICE<br>JUMP</h1>
     <div class="legend">
-      <div><img src="assets/malice.png" alt=""> Malice — saute le plus haut !</div>
-      <div><img src="assets/azelie.png" alt=""> Azélie — +100 points 💖</div>
-      <div><img src="assets/alicia.png" alt=""> Alicia — super saut 🚀</div>
-      <div><img src="assets/artus.png" alt=""> Artus — DANGER, évite-le ! 😈</div>
+      <div><img src="assets/sprite_malice.png" alt=""> Malice — saute le plus haut !</div>
+      <div><img src="assets/sprite_azelie.png" alt=""> Azélie — +100 points 💖</div>
+      <div><img src="assets/sprite_alicia.png" alt=""> Alicia — super saut 🚀</div>
+      <div><img src="assets/artus.png" alt="" class="round"> Artus — DANGER, évite-le ! 😈</div>
     </div>
     <button class="btn" id="playBtn">JOUER</button>
     <div class="hint">📱 Touche la moitié gauche / droite de l'écran pour te déplacer &nbsp;·&nbsp; ⌨️ flèches ← →</div>
@@ -107,8 +108,8 @@
 
   // ---------- Assets ----------
   const IMGS = {};
-  const toLoad = { malice:'assets/malice.png', azelie:'assets/azelie.png',
-                   alicia:'assets/alicia.png', artus:'assets/artus.png', bg:'assets/bg.webp' };
+  const toLoad = { malice:'assets/sprite_malice.png', azelie:'assets/sprite_azelie.png',
+                   alicia:'assets/sprite_alicia.png', artus:'assets/artus.png', bg:'assets/bg.webp' };
   let loaded = 0, total = Object.keys(toLoad).length;
   for (const [k, src] of Object.entries(toLoad)) {
     IMGS[k] = new Image();
@@ -367,6 +368,15 @@
     ctx.restore();
   }
 
+  // sprite détouré (contour déjà intégré au PNG)
+  function drawSprite(img, x, y, size, squish = 1, flip = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale((flip ? -1 : 1) / squish, squish);
+    ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    ctx.restore();
+  }
+
   function rrect(x, y, w, h, r) {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
@@ -416,12 +426,11 @@
       for (const b of bonuses) {
         const yy = b.y + Math.sin(b.wob) * 5;
         const img = b.kind === 'azelie' ? IMGS.azelie : IMGS.alicia;
-        const ring = b.kind === 'azelie' ? '#ff7ab8' : '#7ad6ff';
         // halo
         ctx.beginPath(); ctx.arc(b.x, yy, b.r + 6, 0, Math.PI*2);
         ctx.fillStyle = b.kind === 'azelie' ? 'rgba(255,122,184,.25)' : 'rgba(122,214,255,.25)';
         ctx.fill();
-        drawBubble(img, b.x, yy, b.r, ring);
+        drawSprite(img, b.x, yy, b.r * 2.6);
       }
 
       for (const en of enemies) {
@@ -447,13 +456,14 @@
 
       // joueur
       if (state === STATE.PLAY) {
-        const squish = player.vy < -8 ? 1.12 : player.vy > 8 ? 0.92 : 1;
-        const ring = player.boostT > 0 ? '#7ad6ff' : '#ffd98a';
+        const squish = player.vy < -8 ? 1.1 : player.vy > 8 ? 0.93 : 1;
         if (player.boostT > 0) {
-          ctx.beginPath(); ctx.arc(player.x, player.y, PLAYER_R + 8, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(122,214,255,.3)'; ctx.fill();
+          ctx.beginPath(); ctx.arc(player.x, player.y, PLAYER_R + 14, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(122,214,255,.35)'; ctx.fill();
         }
-        drawBubble(IMGS.malice, player.x, player.y, PLAYER_R, ring, squish);
+        // ancré aux pieds : le bas du sprite touche les plateformes
+        const SP = PLAYER_R * 3.4;
+        drawSprite(IMGS.malice, player.x, player.y + PLAYER_R - SP / 2, SP, squish, player.dir < 0);
       }
       ctx.restore();
 
