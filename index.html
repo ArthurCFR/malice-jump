@@ -168,13 +168,14 @@
   const GRAV = 0.42, JUMP_V = -13.5, BOOST_V = -22;
   const PLAT_W = 92, PLAT_H = 16;
 
-  // difficulté croissante
+  // difficulté croissante, plafonnée à 1000 points
+  const DIFF_CAP = 1000;
   const diff = {
-    gap:   s => Math.min(150, 100 + s / 50),
-    movP:  s => Math.min(0.45, s / 3500),
-    cloudP:s => Math.min(0.28, Math.max(0, (s - 800) / 7000)),
-    artusP:s => s < 350 ? 0 : Math.min(0.22, (s - 350) / 6000),
-    movSpd:s => 1.2 + Math.min(2.2, s / 1800),
+    gap:   s => { s = Math.min(s, DIFF_CAP); return Math.min(150, 100 + s / 50); },
+    movP:  s => { s = Math.min(s, DIFF_CAP); return Math.min(0.45, s / 3500); },
+    cloudP:s => { s = Math.min(s, DIFF_CAP); return Math.min(0.28, Math.max(0, (s - 800) / 7000)); },
+    artusP:s => { s = Math.min(s, DIFF_CAP); return s < 350 ? 0 : Math.min(0.22, (s - 350) / 6000); },
+    movSpd:s => { s = Math.min(s, DIFF_CAP); return 1.2 + Math.min(2.2, s / 1800); },
   };
 
   function newPlatform(y) {
@@ -384,10 +385,13 @@
     pizzas = pizzas.filter(pz => !pz.hit && pz.y > -60);
     enemies = enemies.filter(en => !en.dead);
 
-    // collision méchant
+    // collision méchant — basée sur le sprite visible de Malice (plus grand et
+    // plus haut que le cercle physique qui gère les rebonds)
+    const spriteCy = player.y + PLAYER_R - (PLAYER_R * 3.4) / 2;
+    const spriteR = PLAYER_R * 1.45;
     for (const en of enemies) {
-      const d = Math.hypot(player.x - en.x, player.y - en.y);
-      if (d < PLAYER_R + en.r - 8) { gameOver(); return; }
+      const d = Math.hypot(player.x - en.x, spriteCy - en.y);
+      if (d < spriteR + en.r - 4) { gameOver(); return; }
     }
 
     // chute = mort
