@@ -140,7 +140,7 @@
   // ---------- State ----------
   const STATE = { HOME: 0, PLAY: 1, OVER: 2 };
   let state = STATE.HOME;
-  let platforms = [], bonuses = [], enemies = [], particles = [];
+  let platforms = [], bonuses = [], enemies = [], particles = [], floaters = [];
   let player, score, best, cameraShake, topPlatformY, bgScroll;
   best = +(localStorage.getItem('malicejump_best') || 0);
 
@@ -150,7 +150,7 @@
 
   // difficulté croissante
   const diff = {
-    gap:   s => Math.min(135, 78 + s / 45),
+    gap:   s => Math.min(150, 100 + s / 50),
     movP:  s => Math.min(0.45, s / 3500),
     cloudP:s => Math.min(0.28, Math.max(0, (s - 800) / 7000)),
     artusP:s => s < 350 ? 0 : Math.min(0.22, (s - 350) / 6000),
@@ -185,13 +185,13 @@
   }
 
   function reset() {
-    platforms = []; bonuses = []; enemies = []; particles = [];
+    platforms = []; bonuses = []; enemies = []; particles = []; floaters = [];
     score = 0; cameraShake = 0; bgScroll = 0;
     player = { x: W/2, y: H - 140, vx: 0, vy: JUMP_V, dir: 1, boostT: 0 };
     // sol de départ + plateformes initiales
     platforms.push({ x: W/2 - 70, y: H - 90, w: 140, h: PLAT_H, type:'normal', dir:1, alive:true, vanish:0 });
-    let y = H - 170;
-    while (y > -100) { platforms.push(newPlatform(y)); y -= 60 + Math.random()*40; }
+    let y = H - 180;
+    while (y > -100) { platforms.push(newPlatform(y)); y -= 85 + Math.random()*45; }
     topPlatformY = Math.min(...platforms.map(p => p.y));
   }
 
@@ -263,7 +263,7 @@
           player.y = p.y - PLAYER_R;
           player.vy = JUMP_V;
           sfx.jump();
-          burst(px, p.y, '#ffd98a', 6);
+          burst(px, p.y, '#c98a54', 6);
           if (p.type === 'cloud') { p.alive = false; p.vanish = 1; }
           break;
         }
@@ -299,6 +299,7 @@
       for (const b of bonuses)   b.y += dy;
       for (const en of enemies)  en.y += dy;
       for (const pa of particles) pa.y += dy;
+      for (const fl of floaters) fl.y += dy;
       topPlatformY += dy;
     }
 
@@ -324,6 +325,7 @@
         if (b.kind === 'azelie') {
           score += 100; sfx.bonus();
           burst(b.x, b.y, '#ff7ab8', 18);
+          floaters.push({ x: b.x, y: b.y - 30, text: '+100', life: 1, color: '#ff7ab8' });
         } else {
           player.vy = BOOST_V; player.boostT = 30; sfx.boost();
           burst(b.x, b.y, '#7ad6ff', 18);
@@ -346,6 +348,10 @@
     }
     particles = particles.filter(pa => pa.life > 0);
 
+    // textes flottants (+100)
+    for (const fl of floaters) { fl.y -= 1.4; fl.life -= 0.018; }
+    floaters = floaters.filter(fl => fl.life > 0);
+
     if (cameraShake > 0) cameraShake *= 0.85;
   }
 
@@ -361,38 +367,44 @@
     ctx.restore();
   }
 
+  function rrect(x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else { ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  }
+
   function drawPlatform(p) {
     ctx.save();
     if (p.vanish > 0) ctx.globalAlpha = 1 - p.vanish;
     const colors = { normal: ['#8a5a3b', '#c98a54'], moving: ['#4a7a8c', '#7ab8cc'], cloud: ['#9a8ab8', '#cfc0e8'] };
     const [dark, light] = colors[p.type];
+    const R = p.h * 0.55;
     ctx.fillStyle = dark;
-    ctx.fillRect(p.x, p.y + 4, p.w, p.h - 4);
+    rrect(p.x, p.y, p.w, p.h, R); ctx.fill();
     ctx.fillStyle = light;
-    ctx.fillRect(p.x, p.y, p.w, 6);
-    // petits pixels déco
-    ctx.fillStyle = 'rgba(255,255,255,.25)';
-    ctx.fillRect(p.x + 8, p.y + 2, 10, 2);
-    ctx.fillRect(p.x + p.w - 22, p.y + 2, 8, 2);
+    rrect(p.x + 2, p.y + 1.5, p.w - 4, p.h * 0.45, R * 0.7); ctx.fill();
+    // reflets déco
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    rrect(p.x + 10, p.y + 3, 12, 2.5, 1.5); ctx.fill();
+    rrect(p.x + p.w - 24, p.y + 3, 8, 2.5, 1.5); ctx.fill();
     ctx.restore();
   }
 
   function draw() {
-    // fond lofi en tuiles verticales avec parallax
+    // fond clair, lofi à peine visible pour ne pas perturber le jeu
+    ctx.fillStyle = '#f3eee6';
+    ctx.fillRect(0, 0, W, H);
     const bg = IMGS.bg;
     ctx.imageSmoothingEnabled = false;
     if (bg.complete && bg.naturalWidth) {
       const bw = W, bh = W * bg.naturalHeight / bg.naturalWidth;
       const off = (bgScroll % bh);
+      ctx.globalAlpha = 0.16;
       for (let y = -bh + off; y < H + bh; y += bh) {
         ctx.drawImage(bg, 0, y, bw, bh);
       }
-    } else {
-      ctx.fillStyle = '#2b2333'; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
-    // voile pour lisibilité (assombrit aussi le fond, sans filtre coûteux)
-    ctx.fillStyle = 'rgba(30,24,40,.55)';
-    ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
 
     if (state === STATE.PLAY || state === STATE.OVER) {
@@ -445,17 +457,34 @@
       }
       ctx.restore();
 
+      // textes flottants (+100)
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 28px "Courier New", monospace';
+      for (const fl of floaters) {
+        const pop = fl.life > 0.85 ? 1 + (fl.life - 0.85) * 4 : 1;
+        ctx.save();
+        ctx.translate(fl.x, fl.y);
+        ctx.scale(pop, pop);
+        ctx.globalAlpha = Math.min(1, fl.life * 1.6);
+        ctx.fillStyle = 'rgba(0,0,0,.35)';
+        ctx.fillText(fl.text, 2, 2);
+        ctx.fillStyle = fl.color;
+        ctx.fillText(fl.text, 0, 0);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+
       // score HUD
       ctx.font = 'bold 26px "Courier New", monospace';
       ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.fillStyle = 'rgba(255,255,255,.7)';
       const scTxt = String(score).padStart(5, '0');
       ctx.fillText(scTxt, 18, 40);
-      ctx.fillStyle = '#ffd98a';
+      ctx.fillStyle = '#7a4a28';
       ctx.fillText(scTxt, 16, 38);
       // best
       ctx.font = '14px "Courier New", monospace';
-      ctx.fillStyle = 'rgba(255,255,255,.7)';
+      ctx.fillStyle = 'rgba(90,70,50,.75)';
       ctx.fillText('BEST ' + best, 16, 60);
     }
   }
